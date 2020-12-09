@@ -17,9 +17,11 @@
 #endif
 
 #include "srt.h"
+#include "logger_defs.h"
 
 #include <thread>
 #include <fstream>
+#include <iostream>
 #include <ctime>
 #include <vector>
 
@@ -27,6 +29,8 @@
 
 TEST(Transmission, FileUpload)
 {
+    using std::cout;
+    using std::endl;
     srt_startup();
 
     // Generate the source file
@@ -50,8 +54,10 @@ TEST(Transmission, FileUpload)
     int optval = 0;
     int optlen = sizeof optval;
     ASSERT_EQ(srt_getsockflag(sock_lsn, SRTO_SNDBUF, &optval, &optlen), 0);
-    size_t filesize = 7 * optval;
+    const size_t filesize = 7 * optval;
 
+    int counter = 0;
+    int npackets = 0;
     {
         std::cout << "WILL CREATE source file with size=" << filesize << " (= 7 * " << optval << "[sndbuf])\n";
         std::ofstream outfile("file.source", std::ios::out | std::ios::binary);
@@ -63,7 +69,21 @@ TEST(Transmission, FileUpload)
         {
             char outbyte = rand() % 255;
             outfile.write(&outbyte, 1);
+            ++counter;
+            if (counter == 1456)
+            {
+                ++npackets;
+                cout << "\r" << npackets << "     ";
+                counter = 0;
+            }
         }
+        if (counter)
+        {
+            ++npackets;
+            cout << "\r" << npackets << "     ";
+
+        }
+        cout << endl;
     }
 
     srt_listen(sock_lsn, 1);
@@ -71,6 +91,9 @@ TEST(Transmission, FileUpload)
     // Start listener-receiver thread
 
     bool thread_exit = false;
+
+    //srt_logging::gglog.Warn("TEST: Transmission.FileUload");
+    //srt_setloglevel(LOG_DEBUG);
 
     auto client = std::thread([&]
     {
@@ -90,17 +113,21 @@ TEST(Transmission, FileUpload)
 
         std::vector<char> buf(1456);
 
+        npackets = 0;
         for (;;)
         {
             int n = srt_recv(accepted_sock, buf.data(), 1456);
             ASSERT_NE(n, SRT_ERROR);
             if (n == 0)
             {
+                cout << endl;
                 break;
             }
 
             // Write to file any amount of data received
             copyfile.write(buf.data(), n);
+            ++npackets;
+            cout << "\r" << npackets << "     ";
         }
 
         EXPECT_NE(srt_close(accepted_sock), SRT_ERROR);
@@ -171,6 +198,9 @@ TEST(Transmission, FileUpload)
 
     remove("file.source");
     remove("file.target");
+
+    // restore log level to not affect the others
+    //srt_setloglevel(LOG_NOTICE);
 
     (void)srt_cleanup();
 }
