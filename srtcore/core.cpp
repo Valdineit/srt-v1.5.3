@@ -387,7 +387,7 @@ void srt::CUDT::setOpt(SRT_SOCKOPT optName, const void* optval, int optlen)
     // Restriction check
     const int oflags = s_sockopt_action.flags[optName];
 
-    ScopedLock cg (m_ConnectionLock);
+    CScopedResourceLock cg (m_ConnectionResources);
     ScopedLock sendguard (m_SendLock);
     ScopedLock recvguard (m_RecvLock);
 
@@ -436,7 +436,7 @@ void srt::CUDT::setOpt(SRT_SOCKOPT optName, const void* optval, int optlen)
 
 void srt::CUDT::getOpt(SRT_SOCKOPT optName, void *optval, int &optlen)
 {
-    ScopedLock cg(m_ConnectionLock);
+    CScopedResourceLock cg(m_ConnectionResources);
 
     switch (optName)
     {
@@ -912,7 +912,7 @@ void srt::CUDT::clearData()
 
 void srt::CUDT::open()
 {
-    ScopedLock cg(m_ConnectionLock);
+    CScopedResourceLock cg(m_ConnectionResources);
 
     clearData();
 
@@ -965,7 +965,7 @@ void srt::CUDT::open()
 
 void srt::CUDT::setListenState()
 {
-    ScopedLock cg(m_ConnectionLock);
+    CScopedResourceLock cg(m_ConnectionResources);
 
     if (!m_bOpened)
         throw CUDTException(MJ_NOTSUP, MN_NONE, 0);
@@ -1981,6 +1981,7 @@ bool srt::CUDT::processSrtMsg(const CPacket *ctrlpkt)
         // and the appropriate message must be constructed for sending.
         // No further processing required
         {
+            CScopedResourceLock cg(m_ConnectionResources);
             uint32_t srtdata_out[SRTDATA_MAXSIZE];
             size_t   len_out = 0;
             res = m_pCryptoControl->processSrtMsg_KMREQ(srtdata, len, CUDT::HS_VERSION_UDT4,
@@ -3407,7 +3408,7 @@ void srt::CUDT::synchronizeWithGroup(CUDTGroup* gp)
 
 void srt::CUDT::startConnect(const sockaddr_any& serv_addr, int32_t forced_isn)
 {
-    ScopedLock cg (m_ConnectionLock);
+    CScopedResourceLock cg (m_ConnectionResources);
 
     HLOGC(aclog.Debug, log << CONID() << "startConnect: -> " << serv_addr.str()
             << (m_config.bSynRecving ? " (SYNCHRONOUS)" : " (ASYNCHRONOUS)") << "...");
@@ -3543,7 +3544,7 @@ void srt::CUDT::startConnect(const sockaddr_any& serv_addr, int32_t forced_isn)
     /*
      * Race condition if non-block connect response thread scheduled before we set m_bConnecting to true?
      * Connect response will be ignored and connecting will wait until timeout.
-     * Maybe m_ConnectionLock handling problem? Not used in CUDT::connect(const CPacket& response)
+     * Maybe m_ConnectionResources handling problem? Not used in CUDT::connect(const CPacket& response)
      */
     m_tsLastReqTime = now;
     m_bConnecting = true;
@@ -3796,7 +3797,7 @@ EConnectStatus srt::CUDT::processAsyncConnectResponse(const CPacket &pkt) ATR_NO
     EConnectStatus cst = CONN_CONTINUE;
     CUDTException  e;
 
-    ScopedLock cg(m_ConnectionLock);
+    CScopedResourceLock cg(m_ConnectionResources);
     HLOGC(cnlog.Debug, log << CONID() << "processAsyncConnectResponse: got response for connect request, processing");
     cst = processConnectResponse(pkt, &e);
 
@@ -3834,7 +3835,7 @@ bool srt::CUDT::processAsyncConnectRequest(EReadStatus         rst,
 
     bool status = true;
 
-    ScopedLock cg(m_ConnectionLock);
+    CScopedResourceLock cg(m_ConnectionResources);
     if (!m_bOpened) // Check the socket has not been closed before already.
         return false;
 
@@ -4334,10 +4335,10 @@ EConnectStatus srt::CUDT::processRendezvous(
     return CONN_CONTINUE;
 }
 
-// [[using locked(m_ConnectionLock)]];
+// [[using locked(m_ConnectionResources)]];
 EConnectStatus srt::CUDT::processConnectResponse(const CPacket& response, CUDTException* eout) ATR_NOEXCEPT
 {
-    // NOTE: ASSUMED LOCK ON: m_ConnectionLock.
+    // NOTE: ASSUMED LOCK ON: m_ConnectionResources.
 
     // this is the 2nd half of a connection request. If the connection is setup successfully this returns 0.
     // Returned values:
@@ -4708,7 +4709,7 @@ EConnectStatus srt::CUDT::postConnect(const CPacket* pResponse, bool rendezvous,
     // And, I am connected too.
     m_bConnecting = false;
 
-    // The lock on m_ConnectionLock should still be applied, but
+    // The lock on m_ConnectionResources should still be applied, but
     // the socket could have been started removal before this function
     // has started. Do a sanity check before you continue with the
     // connection process.
@@ -5555,7 +5556,7 @@ void srt::CUDT::acceptAndRespond(const sockaddr_any& agent, const sockaddr_any& 
 {
     HLOGC(cnlog.Debug, log << CONID() << "acceptAndRespond: setting up data according to handshake");
 
-    ScopedLock cg(m_ConnectionLock);
+    CScopedResourceLock cg(m_ConnectionResources);
 
     m_tsRcvPeerStartTime = steady_clock::time_point(); // will be set correctly at SRT HS
 
@@ -6053,7 +6054,7 @@ bool srt::CUDT::closeInternal()
 
     HLOGC(smlog.Debug, log << CONID() << "CLOSING STATE. Acquiring connection lock");
 
-    ScopedLock connectguard(m_ConnectionLock);
+    CScopedResourceLock connectguard(m_ConnectionResources);
 
     // Signal the sender and recver if they are waiting for data.
     releaseSynch();
@@ -7311,7 +7312,8 @@ void srt::CUDT::bstats(CBytePerfMon *perf, bool clear, bool instantaneous)
 
     perf->mbpsBandwidth = Bps2Mbps(availbw * (m_iMaxSRTPayloadSize + pktHdrSize));
 
-    if (tryEnterCS(m_ConnectionLock))
+    //if (m_ConnectionResources.tryAcquire())
+    if (CScopedResourceTryLock cg = m_ConnectionResources)
     {
         if (m_pSndBuffer)
         {
@@ -7357,7 +7359,7 @@ void srt::CUDT::bstats(CBytePerfMon *perf, bool clear, bool instantaneous)
             perf->msRcvBuf   = 0;
         }
 
-        leaveCS(m_ConnectionLock);
+        //m_ConnectionResources.release();
     }
     else
     {
@@ -7499,9 +7501,9 @@ void srt::CUDT::initSynch()
     setupMutex(m_RcvLossLock, "RcvLoss");
     setupMutex(m_RecvAckLock, "RecvAck");
     setupMutex(m_RcvBufferLock, "RcvBuffer");
-    setupMutex(m_ConnectionLock, "Connection");
     setupMutex(m_StatsLock, "Stats");
     setupCond(m_RcvTsbPdCond, "RcvTsbPd");
+    m_ConnectionResources.init();
 }
 
 void srt::CUDT::destroySynch()
@@ -7522,7 +7524,7 @@ void srt::CUDT::destroySynch()
     releaseMutex(m_RcvLossLock);
     releaseMutex(m_RecvAckLock);
     releaseMutex(m_RcvBufferLock);
-    releaseMutex(m_ConnectionLock);
+    m_ConnectionResources.destroy();
     releaseMutex(m_StatsLock);
 
     m_RcvTsbPdCond.notify_all();
@@ -9250,7 +9252,7 @@ std::pair<bool, steady_clock::time_point> srt::CUDT::packData(CPacket& w_packet)
 
     string reason = "reXmit";
 
-    ScopedLock connectguard(m_ConnectionLock);
+    CScopedResourceLock connectguard(m_ConnectionResources);
     // If a closing action is done simultaneously, then
     // m_bOpened should already be false, and it's set
     // just before releasing this lock.
