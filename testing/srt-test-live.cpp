@@ -298,9 +298,9 @@ extern "C" int SrtCheckGroupHook(void* , SRTSOCKET acpsock, int , const sockaddr
     {
         SRT_GROUP_TYPE gt;
         size = sizeof gt;
-        if (-1 != srt_getsockflag(acpsock, SRTO_GROUPTYPE, &gt, &size))
+        if (SRT_ERROR != srt_getsockflag(acpsock, SRTO_GROUPTYPE, &gt, &size))
         {
-            if (gt < Size(gtypes))
+            if (size_t(gt) < Size(gtypes))
                 Verb() << " type=" << gtypes[gt] << VerbNoEOL;
             else
                 Verb() << " type=" << int(gt) << VerbNoEOL;

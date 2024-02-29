@@ -312,8 +312,8 @@ TEST(TestFEC, Connection)
     // that 1s might not be enough.
     SRTSOCKET la[] = { l };
     SRTSOCKET a = srt_accept_bond(la, 1, 2000);
-    ASSERT_NE(a, SRT_ERROR);
-    EXPECT_EQ(connect_res.get(), SRT_SUCCESS);
+    ASSERT_NE(a, SRT_INVALID_SOCK);
+    EXPECT_EQ(connect_res.get(), SRT_STATUS_OK);
 
     // Now that the connection is established, check negotiated config
 
@@ -371,7 +371,7 @@ TEST(TestFEC, ConnectionReorder)
     SRTSOCKET la[] = { l };
     SRTSOCKET a = srt_accept_bond(la, 1, 2000);
     ASSERT_NE(a, SRT_ERROR);
-    EXPECT_EQ(connect_res.get(), SRT_SUCCESS);
+    EXPECT_EQ(connect_res.get(), SRT_STATUS_OK);
 
     // Now that the connection is established, check negotiated config
 
@@ -429,7 +429,7 @@ TEST(TestFEC, ConnectionFull1)
     SRTSOCKET la[] = { l };
     SRTSOCKET a = srt_accept_bond(la, 1, 2000);
     ASSERT_NE(a, SRT_ERROR);
-    EXPECT_EQ(connect_res.get(), SRT_SUCCESS);
+    EXPECT_EQ(connect_res.get(), SRT_STATUS_OK);
 
     // Now that the connection is established, check negotiated config
 
@@ -487,7 +487,7 @@ TEST(TestFEC, ConnectionFull2)
     SRTSOCKET la[] = { l };
     SRTSOCKET a = srt_accept_bond(la, 1, 2000);
     ASSERT_NE(a, SRT_ERROR);
-    EXPECT_EQ(connect_res.get(), SRT_SUCCESS);
+    EXPECT_EQ(connect_res.get(), SRT_STATUS_OK);
 
     // Now that the connection is established, check negotiated config
 
@@ -545,7 +545,7 @@ TEST(TestFEC, ConnectionMess)
     SRTSOCKET la[] = { l };
     SRTSOCKET a = srt_accept_bond(la, 1, 2000);
     ASSERT_NE(a, SRT_ERROR);
-    EXPECT_EQ(connect_res.get(), SRT_SUCCESS);
+    EXPECT_EQ(connect_res.get(), SRT_STATUS_OK);
 
     // Now that the connection is established, check negotiated config
 
@@ -601,7 +601,7 @@ TEST(TestFEC, ConnectionForced)
     SRTSOCKET la[] = { l };
     SRTSOCKET a = srt_accept_bond(la, 1, 2000);
     ASSERT_NE(a, SRT_ERROR);
-    EXPECT_EQ(connect_res.get(), SRT_SUCCESS);
+    EXPECT_EQ(connect_res.get(), SRT_STATUS_OK);
 
     // Now that the connection is established, check negotiated config
 
