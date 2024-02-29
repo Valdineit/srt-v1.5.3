@@ -18,6 +18,7 @@
 #endif
 
 #include "srt.h"
+#include "threadname.h"
 
 #include <array>
 #include <thread>
@@ -97,6 +98,7 @@ TEST(Transmission, FileUpload)
 
     auto client = std::thread([&]
     {
+        srt::ThreadName::set("TEST-in");
         sockaddr_in remote;
         int len = sizeof remote;
         const SRTSOCKET accepted_sock = srt_accept(sock_lsn, (sockaddr*)&remote, &len);
@@ -116,7 +118,12 @@ TEST(Transmission, FileUpload)
         for (;;)
         {
             int n = srt_recv(accepted_sock, buf.data(), 1456);
-            ASSERT_NE(n, SRT_ERROR);
+            EXPECT_NE(n, SRT_ERROR);
+            if (n == -1)
+            {
+                std::cerr << "UNEXPECTED ERROR: " << srt_getlasterror_str() << std::endl;
+                break;
+            }
             if (n == 0)
             {
                 std::cerr << "Received 0 bytes, breaking.\n";
