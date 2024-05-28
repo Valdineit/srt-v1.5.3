@@ -34,7 +34,6 @@ written by
 #include <functional>
 #include <memory>
 #include <iomanip>
-#include <sstream>
 #include <utility>
 
 #if HAVE_CXX11
@@ -45,6 +44,8 @@ written by
 #include <cerrno>
 #include <cstring>
 #include <stdexcept>
+
+#include "sfmt.h"
 
 // -------------- UTILITIES ------------------------
 
@@ -484,7 +485,7 @@ private:
 
     void throw_invalid_index(int i) const
     {
-        std::stringstream ss;
+        fmt::obufstream ss;
         ss << "Index " << i << "out of range";
         throw std::runtime_error(ss.str());
     }
@@ -530,8 +531,8 @@ private:
 // but this function has a different definition for C++11 and C++03.
 namespace srt_pair_op
 {
-    template <class Value1, class Value2>
-    std::ostream& operator<<(std::ostream& s, const std::pair<Value1, Value2>& v)
+    template <class Stream, class Value1, class Value2>
+    Stream& operator<<(Stream& s, const std::pair<Value1, Value2>& v)
     {
         s << "{" << v.first << " " << v.second << "}";
         return s;
@@ -586,7 +587,7 @@ inline Stream& Print(Stream& sout, Arg1&& arg1, Args&&... args)
 template <class... Args>
 inline std::string Sprint(Args&&... args)
 {
-    std::ostringstream sout;
+    fmt::obufstream sout;
     Print(sout, args...);
     return sout.str();
 }
@@ -596,27 +597,6 @@ inline std::string Sprint(Args&&... args)
 // switch to C++11.
 template <class T>
 using UniquePtr = std::unique_ptr<T>;
-
-template <class Container, class Value = typename Container::value_type, typename... Args> inline
-std::string Printable(const Container& in, Value /*pseudoargument*/, Args&&... args)
-{
-    using namespace srt_pair_op;
-    std::ostringstream os;
-    Print(os, args...);
-    os << "[ ";
-    for (auto i: in)
-        os << Value(i) << " ";
-    os << "]";
-    return os.str();
-}
-
-template <class Container> inline
-std::string Printable(const Container& in)
-{
-    using namespace srt_pair_op;
-    using Value = typename Container::value_type;
-    return Printable(in, Value());
-}
 
 template<typename Map, typename Key>
 auto map_get(Map& m, const Key& key, typename Map::mapped_type def = typename Map::mapped_type()) -> typename Map::mapped_type
@@ -693,32 +673,16 @@ public:
 template <class Arg1>
 inline std::string Sprint(const Arg1& arg)
 {
-    std::ostringstream sout;
-    sout << arg;
-    return sout.str();
+    return fmt::sfmts(arg);
 }
 
 // Ok, let it be 2-arg, in case when a manipulator is needed
 template <class Arg1, class Arg2>
 inline std::string Sprint(const Arg1& arg1, const Arg2& arg2)
 {
-    std::ostringstream sout;
+    fmt::obufstream sout;
     sout << arg1 << arg2;
     return sout.str();
-}
-
-template <class Container> inline
-std::string Printable(const Container& in)
-{
-    using namespace srt_pair_op;
-    typedef typename Container::value_type Value;
-    std::ostringstream os;
-    os << "[ ";
-    for (typename Container::const_iterator i = in.begin(); i != in.end(); ++i)
-        os << Value(*i) << " ";
-    os << "]";
-
-    return os.str();
 }
 
 template<typename Map, typename Key>
@@ -751,6 +715,41 @@ typename Map::mapped_type const* map_getp(const Map& m, const Key& key)
 
 #endif
 
+template <class Container, class Value> inline
+std::string Printable(const Container& in, Value /*pseudoargument*/, const char* fmt = 0)
+{
+    fmt::obufstream os;
+    os << "[ ";
+    typedef typename Container::const_iterator it_t;
+    for (it_t i = in.begin(); i != in.end(); ++i)
+        os << fmt::sfmt<Value>(*i, fmt) << " ";
+    os << "]";
+    return os.str();
+}
+
+// Separate version for pairs, used for std::map
+template <class Container, class Key, class Value> inline
+std::string Printable(const Container& in, std::pair<Key, Value>/*pseudoargument*/, const char* fmtk = 0, const char* fmtv = 0)
+{
+    using namespace srt_pair_op;
+    fmt::obufstream os;
+    os << "[ ";
+    typedef typename Container::const_iterator it_t;
+    for (it_t i = in.begin(); i != in.end(); ++i)
+        os << fmt::sfmt<Key>(i->first, fmtk) << ":" << fmt::sfmt<Value>(i->second, fmtv) << " ";
+    os << "]";
+    return os.str();
+}
+
+
+template <class Container> inline
+std::string Printable(const Container& in)
+{
+    using namespace srt_pair_op;
+    typedef typename Container::value_type Value;
+    return Printable(in, Value());
+}
+
 // Printable with prefix added for every element.
 // Useful when printing a container of sockets or sequence numbers.
 template <class Container> inline
@@ -758,7 +757,7 @@ std::string PrintableMod(const Container& in, const std::string& prefix)
 {
     using namespace srt_pair_op;
     typedef typename Container::value_type Value;
-    std::ostringstream os;
+    fmt::obufstream os;
     os << "[ ";
     for (typename Container::const_iterator y = in.begin(); y != in.end(); ++y)
         os << prefix << Value(*y) << " ";
@@ -981,6 +980,19 @@ inline std::string FormatBinaryString(const uint8_t* bytes, size_t size)
     if ( size == 0 )
         return "";
 
+    using namespace fmt;
+
+    obufstream os;
+
+    os << sfmt<int>(bytes[0], "02X");
+    for (size_t i = 1; i < size; ++i)
+    {
+        os << sfmt<int>(bytes[i], "02X");
+    }
+    return os.str();
+
+    /* OLD VERSION
+
     //char buf[256];
     using namespace std;
 
@@ -1008,6 +1020,7 @@ inline std::string FormatBinaryString(const uint8_t* bytes, size_t size)
         os << int(bytes[i]);
     }
     return os.str();
+    */
 }
 
 
@@ -1171,10 +1184,7 @@ inline std::string BufferStamp(const char* mem, size_t size)
         }
 
     // Convert to hex string
-    ostringstream os;
-    os << hex << uppercase << setfill('0') << setw(8) << sum;
-
-    return os.str();
+    return fmt::sfmts(sum, "08X");
 }
 
 template <class OutputIterator>
