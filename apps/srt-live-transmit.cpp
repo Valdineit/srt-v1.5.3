@@ -137,7 +137,7 @@ struct LiveTransmitConfig
     string logfile;
     int bw_report = 0;
     bool srctime = false;
-    size_t buffering = 10;
+    size_t buffering = 20;
     int stats_report = 0;
     string stats_out;
     SrtStatsPrintFormat stats_pf = SRTSTATS_PROFMAT_2COLS;
